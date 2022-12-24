@@ -1,0 +1,97 @@
+#include <LiquidCrystal_I2C.h>
+#include<SPI.h>
+#define LED_rpin 7
+#define LED_gpin 8
+#define sensorPin A0
+// Create a new instance of the LiquidCrystal_I2C class:
+LiquidCrystal_I2C lcd(0x26, 16, 2);
+
+const int fan_control_pin = 3;
+volatile boolean received;
+char Slavereceived;
+
+// Degree symbol:
+byte Degree[] = {
+  B00111,
+  B00101,
+  B00111,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000
+};
+
+void setup()
+{
+  pinMode(LED_rpin,OUTPUT);                 // Setting pin 7 as OUTPUT
+  pinMode(LED_gpin,OUTPUT);             // Setting pin 8 as OUTPUT
+  SPCR |= (1<<SPE)| (1<<SPIE);            //Turn on SPI in Slave Mode
+  received = false;
+  SPI.attachInterrupt();                  //Interuupt ON is set for SPI commnucation
+  sei();
+    pinMode(fan_control_pin, OUTPUT);
+  digitalWrite(fan_control_pin, LOW);
+  lcd.begin();
+  lcd.backlight();
+  // Create a custom character:
+  lcd.createChar(0, Degree);
+}
+
+ISR (SPI_STC_vect)                        //Inerrrput routine function 
+{
+  Slavereceived = SPDR;         // Value received from master if store in variable slavereceived
+  received = true;                        //Sets received as True 
+}
+
+void celsius(float tempC) { //celsius function
+ 
+  lcd.setCursor(0, 0);
+  lcd.print("Temp: ");
+  lcd.print(tempC);
+  lcd.write(0); // print the custom character
+  lcd.print("C");
+}
+
+void fahrenheit(float tempC) { //fahrenheit function
+
+  // Print the temperature on the LCD;
+  float tempF=(tempC*1.8)+32;  // convert celsius into fahrenheit
+  lcd.setCursor(0, 1);
+  lcd.print("Temp: ");
+  lcd.print(tempF);
+  lcd.write(0); // print the custom character
+  lcd.print("F");
+}
+
+void loop()
+{  
+  int reading = analogRead(sensorPin);
+  float voltage = reading * (5000 / 1024.0);
+  float tempC = voltage / 10;
+    celsius(tempC);   //function for celsius
+    fahrenheit(tempC);  //function for fahrenheit
+
+  if(received)   //Logic to SET LED ON OR OFF depending upon the value recerived from master
+   {
+      if (Slavereceived=='A') 
+      {
+        digitalWrite(LED_gpin, HIGH);   //green LED indicates system is in Automatic
+        digitalWrite(LED_rpin, LOW);
+        if(tempC > 30)
+        {
+        digitalWrite(fan_control_pin, HIGH);
+        }
+        else{
+          digitalWrite(fan_control_pin, LOW);
+        }
+      }
+       else
+      {
+        digitalWrite(LED_rpin, HIGH);   //red LED indicates system is in Manual
+        digitalWrite(LED_gpin, LOW);
+        digitalWrite(fan_control_pin, HIGH);
+      } 
+   }
+   delay(1000);
+}
